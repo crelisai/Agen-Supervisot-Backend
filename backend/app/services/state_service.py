@@ -15,6 +15,8 @@ conversations: dict[str, "object"] = {}
 messages: dict[str, list] = {}
 # conversation_id -> list[AuditEvent]
 audit_logs: dict[str, list] = {}
+# conversation_id -> ExternalConversationMapping
+mappings: dict[str, "object"] = {}
 
 
 def reset_state() -> None:
@@ -22,6 +24,7 @@ def reset_state() -> None:
     conversations.clear()
     messages.clear()
     audit_logs.clear()
+    mappings.clear()
 
 
 # --- State machine ------------------------------------------------------------

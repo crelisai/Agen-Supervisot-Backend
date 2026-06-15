@@ -11,8 +11,9 @@ import uuid
 from typing import Optional
 
 from app.models.conversation import Conversation, ConversationStatus
+from app.models.mapping import ExternalConversationMapping
 from app.models.message import Message, SenderType
-from app.services import audit_service, state_service, webex_adapter
+from app.services import audit_service, mapping_service, state_service, webex_adapter
 
 
 class ConversationError(Exception):
@@ -77,11 +78,12 @@ def create_inbound(
     customer_id: str,
     customer_name: str,
     text: str,
-) -> tuple[Conversation, Message]:
+) -> tuple[Conversation, Message, ExternalConversationMapping]:
     """Create a new conversation from a customer inbound message.
 
-    The conversation is created as NEW, the customer message is stored, the
-    conversation is queued, and the message is forwarded to (mock) Webex Connect.
+    The conversation is created as NEW, the customer message is stored, a mock
+    Webex Connect/Engage mapping is generated, the conversation is queued, and
+    the message is forwarded to (mock) Webex Connect.
     """
     conversation_id = _new_id("conv")
     convo = Conversation(
@@ -105,14 +107,33 @@ def create_inbound(
         {"message_id": message.message_id},
     )
 
+    # Generate mock Webex Connect / Engage identifiers and store the mapping.
+    mapping = mapping_service.create_mapping(
+        conversation_id=conversation_id,
+        journey_id=journey_id,
+        customer_id=customer_id,
+        external_user_id=f"ext-{customer_id}",
+        webex_thread_id=mapping_service.generate_webex_thread_id(),
+        webex_chat_id=mapping_service.generate_webex_chat_id(),
+        webex_team_id=f"team-{journey_id}",
+        webex_asset_id="asset-demo",
+    )
+    audit_service.record_event(
+        conversation_id,
+        "External Mapping Created",
+        {
+            "userId": mapping.external_user_id,
+            "tid": mapping.webex_thread_id,
+            "chatId": mapping.webex_chat_id,
+        },
+    )
+
     # Move NEW -> QUEUED and hand off to Webex Connect.
     _transition(convo, ConversationStatus.QUEUED)
     audit_service.record_event(conversation_id, "Queued", {})
-    webex_adapter.send_to_webex_connect(
-        conversation_id, {"text": text, "customer_id": customer_id}
-    )
+    webex_adapter.send_to_webex_connect(conversation_id, text, mapping)
 
-    return convo, message
+    return convo, message, mapping
 
 
 def add_reply(conversation_id: str, agent_id: str, text: str) -> tuple[Conversation, Message]:

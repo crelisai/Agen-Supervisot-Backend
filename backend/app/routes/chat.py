@@ -12,6 +12,7 @@ from app.models.conversation import (
     ReplyRequest,
     WrapUpRequest,
 )
+from app.models.mapping import ExternalConversationMapping
 from app.models.message import Message
 from app.services import conversation_service
 from app.services.conversation_service import ConversationError, ConversationNotFound
@@ -32,16 +33,25 @@ class ConversationWithMessage(Conversation):
     last_message: Message
 
 
-@router.post("/inbound", response_model=ConversationWithMessage,
+class InboundResponse(Conversation):
+    """Inbound response: conversation + first message + external mapping."""
+
+    last_message: Message
+    mapping: ExternalConversationMapping
+
+
+@router.post("/inbound", response_model=InboundResponse,
              summary="Create a conversation from a customer inbound message")
-def inbound(req: InboundMessageRequest) -> ConversationWithMessage:
-    convo, message = conversation_service.create_inbound(
+def inbound(req: InboundMessageRequest) -> InboundResponse:
+    convo, message, mapping = conversation_service.create_inbound(
         journey_id=req.journey_id,
         customer_id=req.customer_id,
         customer_name=req.customer_name,
         text=req.text,
     )
-    return ConversationWithMessage(**convo.model_dump(), last_message=message)
+    return InboundResponse(
+        **convo.model_dump(), last_message=message, mapping=mapping
+    )
 
 
 @router.post("/reply", response_model=ConversationWithMessage,

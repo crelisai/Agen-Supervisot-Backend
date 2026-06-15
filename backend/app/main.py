@@ -15,7 +15,7 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.data.sample_data import seed_sample_data
-from app.routes import admin, chat, webhook
+from app.routes import admin, chat, mapping, webhook
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,6 +39,7 @@ app = FastAPI(
 
 app.include_router(chat.router)
 app.include_router(webhook.router)
+app.include_router(mapping.router)
 app.include_router(admin.router)
 
 

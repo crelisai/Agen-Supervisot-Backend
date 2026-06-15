@@ -58,15 +58,18 @@ backend/
 │   ├── models/                # Pydantic v2 models
 │   │   ├── conversation.py    # Conversation + state enum + request bodies
 │   │   ├── message.py         # Message + SenderType
-│   │   └── webhook.py         # AuditEvent + Webex webhook payloads
+│   │   ├── webhook.py         # AuditEvent + Webex webhook payloads
+│   │   └── mapping.py         # ExternalConversationMapping (Cisco-shaped ids)
 │   ├── services/
 │   │   ├── conversation_service.py  # orchestration / use cases
 │   │   ├── state_service.py         # in-memory stores + transition rules
 │   │   ├── audit_service.py         # audit trail
+│   │   ├── mapping_service.py       # external mapping create/lookup/update
 │   │   └── webex_adapter.py         # MOCK Webex Connect adapter
 │   ├── routes/
 │   │   ├── chat.py            # /chat/*
 │   │   ├── webhook.py         # /webhook/webex
+│   │   ├── mapping.py         # /mapping/*
 │   │   └── admin.py           # /conversations, /audit, /admin/reset
 │   └── data/
 │       └── sample_data.py     # demo seed data
@@ -119,10 +122,101 @@ pytest -q
 | POST   | `/chat/wrapup`                    | Capture wrap-up + disconnect reasons     |
 | POST   | `/chat/customer-returned`         | ASYNC → RETURNED                         |
 | POST   | `/webhook/webex`                  | Mock Cisco Webex Connect webhook         |
+| GET    | `/mapping/{conversation_id}`      | External mapping for a conversation      |
+| GET    | `/mapping/webex-thread/{tid}`     | Mapping by Webex Connect thread id       |
+| GET    | `/mapping/webex-chat/{chatId}`    | Mapping by Webex Engage chat id          |
 | GET    | `/conversations`                  | List all conversations                   |
 | GET    | `/conversations/{id}`             | Conversation detail + messages           |
 | GET    | `/audit/{id}`                     | Audit trail for a conversation           |
 | POST   | `/admin/reset`                    | Clear all in-memory data (demo helper)   |
+
+## External conversation mapping (Cisco-shaped, mock only)
+
+Each conversation gets an `ExternalConversationMapping` on inbound, holding
+**mock-compatible placeholders** for future Webex Connect / Webex Engage ids.
+These field names are **not** confirmed Cisco API fields yet — they are a seam
+for a future integration, generated locally with no Cisco calls.
+
+| Mapping field      | Future Cisco field | Meaning                              |
+|--------------------|--------------------|--------------------------------------|
+| `external_user_id` | `userId`           | App / customer user identifier       |
+| `webex_thread_id`  | `tid`              | Webex Connect thread id              |
+| `webex_chat_id`    | `chatId`           | Webex Engage chat id                 |
+| `webex_team_id`    | `teamId`           | Engage / team routing id             |
+| `webex_asset_id`   | `assetId`          | Connect / Engage asset or business id|
+
+### Example — inbound customer chat (request)
+
+```json
+POST /chat/inbound
+{
+  "journey_id": "uob-tmrw-onboarding",
+  "customer_id": "cust-1001",
+  "customer_name": "Jane Tan",
+  "text": "Hi, I need help."
+}
+```
+
+### Example — inbound response (conversation + message + generated mapping)
+
+```json
+{
+  "conversation_id": "conv-1a2b3c4d5e6f",
+  "journey_id": "uob-tmrw-onboarding",
+  "customer_id": "cust-1001",
+  "customer_name": "Jane Tan",
+  "assigned_agent": null,
+  "status": "QUEUED",
+  "created_at": "2026-06-15T13:37:38.029004Z",
+  "updated_at": "2026-06-15T13:37:38.029004Z",
+  "wrap_up_reason": null,
+  "disconnect_reason": null,
+  "last_message": {
+    "message_id": "msg-aabbccddeeff",
+    "conversation_id": "conv-1a2b3c4d5e6f",
+    "sender_type": "CUSTOMER",
+    "text": "Hi, I need help.",
+    "timestamp": "2026-06-15T13:37:38.029004Z"
+  },
+  "mapping": {
+    "conversation_id": "conv-1a2b3c4d5e6f",
+    "journey_id": "uob-tmrw-onboarding",
+    "customer_id": "cust-1001",
+    "external_user_id": "ext-cust-1001",
+    "webex_thread_id": "tid-0123456789abcdef",
+    "webex_chat_id": "chat-fedcba9876543210",
+    "webex_team_id": "team-uob-tmrw-onboarding",
+    "webex_asset_id": "asset-demo",
+    "created_at": "2026-06-15T13:37:38.029004Z",
+    "updated_at": "2026-06-15T13:37:38.029004Z"
+  }
+}
+```
+
+### Mock Webex Connect payload shape
+
+`webex_adapter.send_to_webex_connect()` logs (and audits) a Cisco-shaped payload
+built from the mapping — **no network call is made**:
+
+```json
+{
+  "datetime": "2026-06-15T13:37:38.029004+00:00",
+  "message": "Hi, I need help.",
+  "userId": "ext-cust-1001",
+  "tid": "tid-0123456789abcdef",
+  "chatId": "chat-fedcba9876543210",
+  "teamId": "team-uob-tmrw-onboarding",
+  "assetId": "asset-demo"
+}
+```
+
+Look the mapping up later by any of its ids:
+
+```bash
+curl -s http://127.0.0.1:8000/mapping/<conversation_id>
+curl -s http://127.0.0.1:8000/mapping/webex-thread/<tid>
+curl -s http://127.0.0.1:8000/mapping/webex-chat/<chatId>
+```
 
 ## Sample curl commands
 

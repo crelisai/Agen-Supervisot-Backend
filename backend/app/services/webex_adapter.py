@@ -12,15 +12,46 @@ a live integration.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Optional
 
+from app.models.mapping import ExternalConversationMapping
 from app.services import audit_service
 
 logger = logging.getLogger("webex_adapter")
 
 
-def send_to_webex_connect(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Pretend to forward a customer message to Webex Connect."""
+def build_webex_payload(
+    message: str,
+    mapping: Optional[ExternalConversationMapping],
+) -> dict[str, Any]:
+    """Build a mock Webex Connect-shaped payload from a conversation mapping.
+
+    Shape mirrors the *expected future* Cisco field names (userId / tid / chatId).
+    These are NOT confirmed Cisco API fields — they are mock placeholders.
+    """
+    return {
+        "datetime": datetime.now(timezone.utc).isoformat(),
+        "message": message,
+        "userId": mapping.external_user_id if mapping else None,
+        "tid": mapping.webex_thread_id if mapping else None,
+        "chatId": mapping.webex_chat_id if mapping else None,
+        "teamId": mapping.webex_team_id if mapping else None,
+        "assetId": mapping.webex_asset_id if mapping else None,
+    }
+
+
+def send_to_webex_connect(
+    conversation_id: str,
+    message: str,
+    mapping: Optional[ExternalConversationMapping] = None,
+) -> dict[str, Any]:
+    """Pretend to forward a customer message to Webex Connect.
+
+    Logs a Cisco-shaped payload and records it in the audit trail. No network
+    calls are made.
+    """
+    payload = build_webex_payload(message, mapping)
     logger.info("[MOCK] send_to_webex_connect conversation=%s payload=%s",
                 conversation_id, payload)
     audit_service.record_event(
@@ -28,7 +59,12 @@ def send_to_webex_connect(conversation_id: str, payload: dict[str, Any]) -> dict
         "Sent To Webex Connect",
         {"payload": payload, "mock": True},
     )
-    return {"status": "accepted", "mock": True, "conversation_id": conversation_id}
+    return {
+        "status": "accepted",
+        "mock": True,
+        "conversation_id": conversation_id,
+        "payload": payload,
+    }
 
 
 def assign_agent(conversation_id: str, agent_id: str) -> dict[str, Any]:

@@ -20,7 +20,7 @@ def seed_sample_data() -> None:
     )
 
     # A conversation that has progressed into ASYNC (waiting on the customer).
-    convo, _ = conversation_service.create_inbound(
+    convo, _, _ = conversation_service.create_inbound(
         journey_id="giybug-support",
         customer_id="cust-2002",
         customer_name="Arjun Rao",
