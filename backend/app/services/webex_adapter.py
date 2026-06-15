@@ -1,0 +1,68 @@
+"""Mock Cisco Webex Connect adapter.
+
+None of these functions make real network calls. They log the action and write
+an audit event so the demo can show the full async flow:
+
+    Async Chat Server -> Webex Connect -> Agent Desktop -> Webhook -> Async Chat Server
+
+Replace the bodies here with real Webex Connect SDK / REST calls when wiring up
+a live integration.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from app.services import audit_service
+
+logger = logging.getLogger("webex_adapter")
+
+
+def send_to_webex_connect(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Pretend to forward a customer message to Webex Connect."""
+    logger.info("[MOCK] send_to_webex_connect conversation=%s payload=%s",
+                conversation_id, payload)
+    audit_service.record_event(
+        conversation_id,
+        "Sent To Webex Connect",
+        {"payload": payload, "mock": True},
+    )
+    return {"status": "accepted", "mock": True, "conversation_id": conversation_id}
+
+
+def assign_agent(conversation_id: str, agent_id: str) -> dict[str, Any]:
+    """Pretend Webex Connect routed the conversation to an agent."""
+    logger.info("[MOCK] assign_agent conversation=%s agent=%s",
+                conversation_id, agent_id)
+    audit_service.record_event(
+        conversation_id,
+        "Assigned To Agent",
+        {"agent_id": agent_id, "mock": True},
+    )
+    return {"status": "assigned", "agent_id": agent_id, "mock": True}
+
+
+def notify_previous_agent(conversation_id: str, agent_id: str | None) -> dict[str, Any]:
+    """Pretend to notify the agent who previously handled an ASYNC conversation."""
+    logger.info("[MOCK] notify_previous_agent conversation=%s agent=%s",
+                conversation_id, agent_id)
+    audit_service.record_event(
+        conversation_id,
+        "Notified Previous Agent",
+        {"agent_id": agent_id, "mock": True},
+    )
+    return {"status": "notified", "agent_id": agent_id, "mock": True}
+
+
+def receive_webhook(conversation_id: str, event_type: str,
+                    payload: dict[str, Any]) -> dict[str, Any]:
+    """Record receipt of a (mock) Webex Connect webhook callback."""
+    logger.info("[MOCK] receive_webhook conversation=%s event=%s payload=%s",
+                conversation_id, event_type, payload)
+    audit_service.record_event(
+        conversation_id,
+        "Webhook Received",
+        {"event_type": event_type, "payload": payload, "mock": True},
+    )
+    return {"status": "received", "event_type": event_type, "mock": True}
